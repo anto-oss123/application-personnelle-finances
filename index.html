@@ -607,8 +607,6 @@ const RECURRENCES = {
   bimonthly:   { label: '2x / mois' },
 };
 
-const DEFAULT_CATEGORIES = ['Logement', 'Épicerie', 'Transport', 'Abonnements', 'Épargne', 'Assurances', 'Autre'];
-
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
 function loadData() {
@@ -618,15 +616,15 @@ function loadData() {
     raw = {
       accounts: [],
       expenses: [],
-      categories: [...DEFAULT_CATEGORIES],
       defaultAccountId: null,
       payHistory: [],
       fxRateEURtoCAD: null,
       fxRateFetchedAt: null,
     };
   }
-  if (!raw.categories) raw.categories = [...DEFAULT_CATEGORIES];
   if (!raw.payHistory) raw.payHistory = [];
+  // Migration douce : anciens comptes sans solde -> 0 par défaut
+  raw.accounts.forEach(a => { if (typeof a.balance !== 'number') a.balance = 0; });
   return raw;
 }
 
@@ -680,22 +678,36 @@ function expensePerPayAmountCADFixed(exp) {
 }
 
 function computeRepartition(payAmount) {
-  const byAccount = {}; // accountId -> { total, items: [] }
-  DATA.accounts.forEach(a => byAccount[a.id] = { account: a, total: 0, items: [] });
+  const byAccount = {}; // accountId -> { needed, balance, toTransfer, items: [] }
+  DATA.accounts.forEach(a => byAccount[a.id] = {
+    account: a,
+    needed: 0,        // total des dépenses assignées à ce compte, pour cette paie
+    balance: a.balance || 0,
+    toTransfer: 0,    // ce qu'il faut réellement virer, compte tenu du solde déjà présent
+    items: [],
+  });
 
   DATA.expenses.forEach(exp => {
     if (!byAccount[exp.accountId]) return;
     const amt = expensePerPayAmountCADFixed(exp);
-    byAccount[exp.accountId].total += amt;
+    byAccount[exp.accountId].needed += amt;
     byAccount[exp.accountId].items.push({ ...exp, computedCAD: amt });
   });
 
+  // Le montant à transférer sur un compte = besoin - solde déjà présent, jamais négatif.
+  // Si le solde couvre déjà tout, rien à transférer sur ce compte.
+  Object.values(byAccount).forEach(b => {
+    b.toTransfer = Math.max(0, b.needed - b.balance);
+    b.total = b.toTransfer; // alias conservé pour compatibilité avec le reste de l'UI
+  });
+
   let totalAssigned = 0;
-  Object.values(byAccount).forEach(b => totalAssigned += b.total);
+  Object.values(byAccount).forEach(b => totalAssigned += b.toTransfer);
 
   const remainder = Math.max(0, payAmount - totalAssigned);
   if (DATA.defaultAccountId && byAccount[DATA.defaultAccountId]) {
     byAccount[DATA.defaultAccountId].total += remainder;
+    byAccount[DATA.defaultAccountId].toTransfer += remainder;
     byAccount[DATA.defaultAccountId].isDefault = true;
     byAccount[DATA.defaultAccountId].remainderPart = remainder;
   }
@@ -714,7 +726,23 @@ function computeRepartition(payAmount) {
    FX RATE (live)
 ============================================================ */
 async function fetchFxRate() {
-  // Nouvel endpoint (Frankfurter a migré vers api.frankfurter.dev en 2026).
+  // Source 1 : ExchangeRate-API (open.er-api.com), gratuite, sans clé, très largement utilisée.
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/EUR');
+    if (res.ok) {
+      const json = await res.json();
+      const rate = json && json.result === 'success' && json.rates && json.rates.CAD;
+      if (rate) {
+        DATA.fxRateEURtoCAD = rate;
+        DATA.fxRateFetchedAt = Date.now();
+        save();
+        return rate;
+      }
+    }
+  } catch (e) {
+    console.warn('FX fetch (ExchangeRate-API) failed, trying fallback', e);
+  }
+  // Source 2 : Frankfurter (nouveau domaine api.frankfurter.dev)
   try {
     const res = await fetch('https://api.frankfurter.dev/v2/rate/EUR/CAD');
     if (res.ok) {
@@ -728,9 +756,9 @@ async function fetchFxRate() {
       }
     }
   } catch (e) {
-    console.warn('FX fetch (v2) failed, trying fallback', e);
+    console.warn('FX fetch (Frankfurter v2) failed, trying fallback', e);
   }
-  // Fallback sur l'ancien domaine, au cas où
+  // Source 3 : Frankfurter (ancien domaine, au cas où)
   try {
     const res2 = await fetch('https://api.frankfurter.app/latest?from=EUR&to=CAD');
     if (res2.ok) {
@@ -744,7 +772,7 @@ async function fetchFxRate() {
       }
     }
   } catch (e2) {
-    console.warn('FX fetch (fallback) failed, using cached/fallback rate', e2);
+    console.warn('FX fetch (Frankfurter v1) failed, using cached/fallback rate', e2);
   }
   return DATA.fxRateEURtoCAD || null;
 }
@@ -926,13 +954,20 @@ function renderMainResults() {
   accountsSorted.forEach(acc => {
     const b = rep.byAccount[acc.id];
     const type = ACCOUNT_TYPES[acc.type] || ACCOUNT_TYPES.autre;
-    if (b.total <= 0 && b.items.length === 0 && !b.isDefault) return;
+    if (b.needed <= 0 && b.items.length === 0 && !b.isDefault) return;
+    let subtext = `${b.items.length} dépense${b.items.length>1?'s':''}`;
+    if (b.balance > 0 && b.needed > 0) {
+      subtext += b.toTransfer === 0 && !b.isDefault
+        ? ' · déjà couvert par le solde'
+        : ` · solde ${fmtCAD(b.balance)} déduit`;
+    }
+    if (b.isDefault && b.remainderPart > 0) subtext += ' + surplus';
     html += `
     <div class="row row-tap" onclick="openAccountDetail('${acc.id}', ${payAmount})">
       <div class="row-icon" style="background:${type.color};">${type.icon}</div>
       <div class="row-main">
         <div class="row-title">${acc.name}${b.isDefault ? ' <span style="font-size:11px; color:var(--good); font-weight:700;">· DÉFAUT</span>' : ''}</div>
-        <div class="row-sub">${type.label} · ${b.items.length} dépense${b.items.length>1?'s':''}${b.isDefault && b.remainderPart>0 ? ' + surplus' : ''}</div>
+        <div class="row-sub">${type.label} · ${subtext}</div>
       </div>
       <div class="row-value">${fmtCAD(b.total)}</div>
       <div class="row-chevron">${ICONS.chevron}</div>
@@ -998,7 +1033,7 @@ function openAccountDetail(accountId, payAmount) {
         <div class="row-icon" style="background:${isEur ? 'var(--euro)' : 'var(--ink-2)'};">${isEur ? ICONS.euro : mode.icon}</div>
         <div class="row-main">
           <div class="row-title">${it.name}</div>
-          <div class="row-sub">${it.category} · ${rec.label} · ${pct}%${isEur ? ` · ${fmtEUR(it.amount)}` : ''}</div>
+          <div class="row-sub">${rec.label} · ${pct}%${isEur ? ` · ${fmtEUR(it.amount)}` : ''}</div>
         </div>
         <div class="row-value">${fmtCAD(it.computedCAD)}</div>
       </div>`;
@@ -1019,11 +1054,20 @@ function openAccountDetail(accountId, payAmount) {
     }
   }
 
+  const showBalanceBreakdown = b.balance > 0 && b.needed > 0;
+
   openSheet(acc.name, `
     <div class="card" style="text-align:center; padding:20px 14px;">
       <div class="row-sub">${type.label}</div>
       <div class="big-num" style="font-size:27px; margin-top:2px;">${fmtCAD(b.total)}</div>
       <div class="row-sub" style="margin-top:2px;">à envoyer sur cette paie</div>
+      ${showBalanceBreakdown ? `
+      <div class="hairline-top" style="display:flex; justify-content:space-between; font-size:12.5px; color:var(--ink-1);">
+        <span>Besoin total</span><span class="mono">${fmtCAD(b.needed)}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12.5px; color:var(--ink-1); margin-top:4px;">
+        <span>Solde déjà présent</span><span class="mono">− ${fmtCAD(b.balance)}</span>
+      </div>` : ''}
     </div>
     ${itemsHtml}
   `);
@@ -1051,7 +1095,7 @@ function renderSettings() {
           <div class="row-title">${acc.name} ${isDefault ? `<span style="color:var(--good); display:inline-flex; width:11px; height:11px; vertical-align:-1px;">${ICONS.star}</span>` : ''}</div>
           <div class="row-sub">${type.label}${acc.currency && acc.currency !== 'CAD' ? ' · ' + acc.currency : ''}</div>
         </div>
-        <div class="row-chevron">${ICONS.chevron}</div>
+        <div class="row-value" style="font-size:13px; color:var(--ink-1);">${fmtCAD(acc.balance || 0)}</div>
       </div>`;
     });
     html += `</div>`;
@@ -1076,7 +1120,7 @@ function renderSettings() {
         <div class="row-icon" style="background:${isEur ? 'var(--euro)' : 'var(--ink-2)'};">${isEur ? ICONS.euro : mode.icon}</div>
         <div class="row-main">
           <div class="row-title">${exp.name}</div>
-          <div class="row-sub">${exp.category} · ${acc ? acc.name : '—'} · ${rec.label} · ${pct}%/paie</div>
+          <div class="row-sub">${acc ? acc.name : '—'} · ${rec.label} · ${pct}%/paie</div>
         </div>
         <div class="row-value">${isEur ? fmtEUR(exp.amount) : fmtCAD(exp.amount)}</div>
       </div>`;
@@ -1096,14 +1140,6 @@ function renderSettings() {
       </div>
       <div class="row-value" style="font-size:14px; color:var(--ink-1);">${DATA.defaultAccountId ? (DATA.accounts.find(a=>a.id===DATA.defaultAccountId)?.name || '—') : 'Aucun'}</div>
     </div>
-    <div class="row row-tap" onclick="openCategoriesManager()">
-      <div class="row-icon" style="background:var(--warn);">${ICONS.tag}</div>
-      <div class="row-main">
-        <div class="row-title">Catégories de dépenses</div>
-        <div class="row-sub">${DATA.categories.length} catégorie${DATA.categories.length>1?'s':''}</div>
-      </div>
-      <div class="row-chevron">${ICONS.chevron}</div>
-    </div>
     <div class="row row-tap" onclick="refreshFxRateManual()">
       <div class="row-icon" style="background:var(--euro);">${ICONS.euro}</div>
       <div class="row-main">
@@ -1120,7 +1156,7 @@ function renderSettings() {
 /* ---------- Account form ---------- */
 function openAccountForm(accountId) {
   const isEdit = !!accountId;
-  const acc = isEdit ? DATA.accounts.find(a => a.id === accountId) : { name: '', type: 'perso', currency: 'CAD' };
+  const acc = isEdit ? DATA.accounts.find(a => a.id === accountId) : { name: '', type: 'perso', currency: 'CAD', balance: 0 };
 
   const typeChips = Object.entries(ACCOUNT_TYPES).map(([key, t]) =>
     `<button type="button" class="chip ${acc.type===key?'active':''}" data-type-chip="${key}">${t.label}</button>`
@@ -1142,6 +1178,11 @@ function openAccountForm(accountId) {
         <option value="EUR" ${acc.currency==='EUR'?'selected':''}>EUR — Euro</option>
       </select>
     </div>
+    <div class="field">
+      <label class="field-label">Solde actuel</label>
+      <input id="f_balance" inputmode="decimal" placeholder="0.00" value="${typeof acc.balance === 'number' ? acc.balance : 0}" />
+      <div class="row-sub" style="margin-top:6px; padding-left:2px;">Ce qui est déjà dans ce compte réduit d'autant le montant à transférer.</div>
+    </div>
     <div class="sheet-actions" style="padding:6px 0 0;">
       <button class="btn btn-accent" onclick="saveAccountForm('${accountId||''}')">Enregistrer</button>
       ${isEdit ? `<div style="height:10px;"></div><button class="btn btn-danger" onclick="deleteAccount('${accountId}')">Supprimer ce compte</button>` : ''}
@@ -1162,6 +1203,8 @@ function saveAccountForm(accountId) {
   const name = document.getElementById('f_name').value.trim();
   const currency = document.getElementById('f_currency').value;
   const type = window._currentAccountFormType ? window._currentAccountFormType() : 'perso';
+  let balance = parseFloat(document.getElementById('f_balance').value.replace(',', '.'));
+  if (isNaN(balance)) balance = 0;
 
   if (!name) {
     showAlert({ title: 'Nom requis', message: 'Donne un nom à ce compte pour continuer.' });
@@ -1170,9 +1213,9 @@ function saveAccountForm(accountId) {
 
   if (accountId) {
     const acc = DATA.accounts.find(a => a.id === accountId);
-    acc.name = name; acc.type = type; acc.currency = currency;
+    acc.name = name; acc.type = type; acc.currency = currency; acc.balance = balance;
   } else {
-    const newAcc = { id: uid(), name, type, currency };
+    const newAcc = { id: uid(), name, type, currency, balance };
     DATA.accounts.push(newAcc);
     if (!DATA.defaultAccountId) DATA.defaultAccountId = newAcc.id;
   }
@@ -1226,11 +1269,10 @@ function openExpenseForm(expenseId) {
   }
   const isEdit = !!expenseId;
   const exp = isEdit ? DATA.expenses.find(e => e.id === expenseId) : {
-    name: '', category: DATA.categories[0], amount: '', currency: 'CAD',
+    name: '', amount: '', currency: 'CAD',
     accountId: DATA.accounts[0].id, execMode: 'prelevement', recurrence: 'monthly',
   };
 
-  const catOptions = DATA.categories.map(c => `<option value="${c}" ${exp.category===c?'selected':''}>${c}</option>`).join('');
   const accOptions = DATA.accounts.map(a => `<option value="${a.id}" ${exp.accountId===a.id?'selected':''}>${a.name}</option>`).join('');
   const modeChips = Object.entries(EXEC_MODES).map(([key,m]) =>
     `<button type="button" class="chip ${exp.execMode===key?'active':''}" data-mode-chip="${key}">${m.label}</button>`
@@ -1256,10 +1298,6 @@ function openExpenseForm(expenseId) {
       </div>
     </div>
     <div class="field" id="e_fxPreview" style="display:${exp.currency==='EUR'?'block':'none'};"></div>
-    <div class="field">
-      <label class="field-label">Catégorie</label>
-      <select id="e_category">${catOptions}</select>
-    </div>
     <div class="field">
       <label class="field-label">Compte destination</label>
       <select id="e_account">${accOptions}</select>
@@ -1351,7 +1389,6 @@ function saveExpenseForm(expenseId) {
   const name = document.getElementById('e_name').value.trim();
   const amount = parseFloat(document.getElementById('e_amount').value.replace(',', '.'));
   const currency = document.getElementById('e_currency').value;
-  const category = document.getElementById('e_category').value;
   const accountId = document.getElementById('e_account').value;
   const recurrence = document.getElementById('e_recurrence').value;
   const execMode = window._currentExpenseFormMode ? window._currentExpenseFormMode() : 'prelevement';
@@ -1364,7 +1401,7 @@ function saveExpenseForm(expenseId) {
     return;
   }
 
-  const payload = { name, amount, currency, category, accountId, recurrence, execMode, payPercent };
+  const payload = { name, amount, currency, accountId, recurrence, execMode, payPercent };
 
   if (expenseId) {
     const idx = DATA.expenses.findIndex(e => e.id === expenseId);
@@ -1390,57 +1427,6 @@ function deleteExpense(expenseId) {
     closeSheet();
     renderSettings();
   });
-}
-
-/* ---------- Categories manager ---------- */
-function openCategoriesManager() {
-  renderCategoriesSheet();
-}
-function renderCategoriesSheet() {
-  let rows = DATA.categories.map(cat => {
-    const inUse = DATA.expenses.some(e => e.category === cat);
-    return `
-    <div class="row">
-      <div class="row-icon" style="background:var(--warn);">${ICONS.tag}</div>
-      <div class="row-main"><div class="row-title">${cat}</div></div>
-      <button class="btn btn-sm btn-danger" onclick="deleteCategory('${cat.replace(/'/g,"\\'")}')" ${inUse ? 'disabled style="opacity:0.35;"' : ''}>Suppr.</button>
-    </div>`;
-  }).join('');
-
-  openSheet('Catégories', `
-    <div class="list">${rows}</div>
-    <div class="field" style="margin-top:16px;">
-      <label class="field-label">Nouvelle catégorie</label>
-      <div style="display:flex; gap:8px;">
-        <input id="newCatInput" type="text" placeholder="Ex: Santé, Loisirs..." style="flex:1;" />
-        <button class="btn btn-accent btn-sm" onclick="addCategory()">Ajouter</button>
-      </div>
-    </div>
-  `);
-}
-function addCategory() {
-  const inp = document.getElementById('newCatInput');
-  const val = inp.value.trim();
-  if (!val) return;
-  if (DATA.categories.includes(val)) {
-    showAlert({ title: 'Déjà existante', message: 'Cette catégorie existe déjà.' });
-    return;
-  }
-  DATA.categories.push(val);
-  save();
-  renderCategoriesSheet();
-  renderSettings();
-}
-function deleteCategory(cat) {
-  const inUse = DATA.expenses.some(e => e.category === cat);
-  if (inUse) {
-    showAlert({ title: 'Catégorie utilisée', message: 'Cette catégorie est utilisée par au moins une dépense. Modifie ces dépenses avant de la supprimer.' });
-    return;
-  }
-  DATA.categories = DATA.categories.filter(c => c !== cat);
-  save();
-  renderCategoriesSheet();
-  renderSettings();
 }
 
 /* ---------- FX manual refresh ---------- */
