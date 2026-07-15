@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0A0A0C">
+<title>Répartition</title>
+<style>
+:root {
+  --bg-0: #F2F1F6;
+  --bg-1: #FFFFFF;
+  --bg-2: rgba(255,255,255,0.65);
+  --bg-3: rgba(255,255,255,0.45);
+  --ink-0: #0B0B0D;
+  --ink-1: rgba(11,11,13,0.62);
+  --ink-2: rgba(11,11,13,0.38);
+  --hair: rgba(11,11,13,0.08);
+  --accent: #3A7BFF;
+  --accent-ink: #ffffff;
+  --good: #2FB670;
+  --warn: #FF9F45;
+  --bad: #FF5B5B;
+  --euro: #7A5CFF;
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+  --shadow-2: 0 2px 8px rgba(0,0,0,0.06), 0 20px 48px rgba(0,0,0,0.10);
+  --radius-xl: 34px;
+  --radius-l: 24px;
+  --radius-m: 18px;
+  --radius-s: 12px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-0: #000000;
+    --bg-1: #121214;
+    --bg-2: rgba(28,28,32,0.62);
+    --bg-3: rgba(255,255,255,0.06);
+    --ink-0: #F5F5F7;
+    --ink-1: rgba(245,245,247,0.62);
+    --ink-2: rgba(245,245,247,0.36);
+    --hair: rgba(255,255,255,0.09);
+    --accent: #5B9BFF;
+    --accent-ink: #08101F;
+    --good: #3DD07F;
+    --warn: #FFB259;
+    --bad: #FF6B6B;
+    --euro: #9B85FF;
+    --shadow-1: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    --shadow-2: 0 2px 10px rgba(0,0,0,0.35), 0 24px 60px rgba(0,0,0,0.5);
+  }
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  background: var(--bg-0);
+  color: var(--ink-0);
+  font-family: -apple-system, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* subtle ambient background */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 15% 8%, rgba(58,123,255,0.16), transparent 45%),
+    radial-gradient(circle at 90% 78%, rgba(122,92,255,0.12), transparent 40%);
+}
+@media (prefers-color-scheme: dark) {
+  .ambient {
+    background:
+      radial-gradient(circle at 15% 8%, rgba(91,155,255,0.14), transparent 45%),
+      radial-gradient(circle at 90% 78%, rgba(155,133,255,0.10), transparent 40%);
+  }
+}
+
+#app {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  width: 100%;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-top: calc(var(--safe-top) + 54px);
+  padding-bottom: calc(var(--safe-bottom) + 118px);
+  padding-left: 18px;
+  padding-right: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+.screen.active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+/* Nav bar (large title style) */
+.topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 20;
+  padding-top: var(--safe-top);
+  pointer-events: none;
+}
+.topbar-inner {
+  padding: 10px 20px 12px;
+}
+.topbar-title {
+  font-size: 34px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  color: var(--ink-0);
+}
+.topbar-sub {
+  font-size: 14px;
+  color: var(--ink-1);
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+/* Tab bar - floating pill, liquid glass */
+.tabbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 18px);
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  background: var(--bg-2);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8);
+  backdrop-filter: blur(30px) saturate(1.8);
+  border-radius: 26px;
+  border: 0.5px solid var(--hair);
+  box-shadow: var(--shadow-2);
+}
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 20px;
+  border-radius: 20px;
+  border: none;
+  background: transparent;
+  color: var(--ink-1);
+  font-size: 14.5px;
+  font-weight: 650;
+  font-family: inherit;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+.tab-btn.active {
+  background: var(--ink-0);
+  color: var(--bg-0);
+}
+.tab-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+/* Cards */
+.card {
+  background: var(--bg-2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-1);
+  padding: 20px;
+  margin-bottom: 14px;
+}
+.card-solid {
+  background: var(--bg-1);
+  border-radius: var(--radius-l);
+  border: 0.5px solid var(--hair);
+  padding: 20px;
+  margin-bottom: 14px;
+}
+
+.section-label {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  margin: 22px 4px 8px;
+}
+.section-label:first-child { margin-top: 4px; }
+
+/* List rows (settings-style) */
+.list {
+  background: var(--bg-2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  border-radius: var(--radius-l);
+  border: 0.5px solid var(--hair);
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+  margin-bottom: 14px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 0.5px solid var(--hair);
+  position: relative;
+}
+.row:last-child { border-bottom: none; }
+.row-icon {
+  width: 30px; height: 30px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+}
+.row-icon svg { width: 16px; height: 16px; }
+.row-main { flex: 1; min-width: 0; }
+.row-title { font-size: 16px; font-weight: 560; color: var(--ink-0); }
+.row-sub { font-size: 13px; color: var(--ink-1); margin-top: 1px; }
+.row-value { font-size: 16px; font-weight: 650; color: var(--ink-0); flex-shrink: 0; }
+.row-chevron { color: var(--ink-2); flex-shrink: 0; }
+.row-chevron svg { width: 9px; height: 15px; }
+.row-tap { cursor: pointer; -webkit-user-select: none; user-select: none; }
+.row-tap:active { background: rgba(120,120,128,0.12); }
+
+/* Buttons */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  border-radius: var(--radius-m);
+  font-family: inherit;
+  font-size: 16.5px;
+  font-weight: 650;
+  padding: 15px 20px;
+  width: 100%;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.btn:active { transform: scale(0.97); opacity: 0.85; }
+.btn-primary { background: var(--ink-0); color: var(--bg-0); }
+.btn-accent { background: var(--accent); color: var(--accent-ink); }
+.btn-ghost {
+  background: var(--bg-3);
+  color: var(--ink-0);
+  border: 0.5px solid var(--hair);
+}
+.btn-danger { background: rgba(255,91,91,0.14); color: var(--bad); }
+.btn-sm { padding: 9px 16px; font-size: 14px; width: auto; border-radius: 14px; }
+
+.fab {
+  position: fixed;
+  z-index: 25;
+}
+
+/* Inputs */
+.field {
+  margin-bottom: 14px;
+}
+.field-label {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-1);
+  margin-bottom: 6px;
+  display: block;
+  padding-left: 2px;
+}
+input, select, textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 550;
+  color: var(--ink-0);
+  background: var(--bg-3);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-s);
+  padding: 13px 14px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 34px;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+}
+.field-row { display: flex; gap: 10px; }
+.field-row > .field { flex: 1; }
+
+/* Segmented control */
+.segmented {
+  display: flex;
+  background: var(--bg-3);
+  border-radius: var(--radius-s);
+  padding: 3px;
+  gap: 3px;
+  border: 0.5px solid var(--hair);
+}
+.segmented button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 9px 8px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 620;
+  color: var(--ink-1);
+  border-radius: 9px;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+.segmented button.active {
+  background: var(--bg-1);
+  color: var(--ink-0);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+
+/* Chips */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  padding: 8px 14px;
+  border-radius: 100px;
+  font-size: 13.5px;
+  font-weight: 600;
+  background: var(--bg-3);
+  border: 0.5px solid var(--hair);
+  color: var(--ink-1);
+}
+.chip.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+
+/* Sheet / modal */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 90;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.sheet-overlay.show { opacity: 1; pointer-events: auto; }
+.sheet {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 91;
+  background: var(--bg-1);
+  border-radius: 28px 28px 0 0;
+  box-shadow: var(--shadow-2);
+  transform: translateY(100%);
+  transition: transform 0.32s cubic-bezier(.32,.72,0,1);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(var(--safe-bottom) + 16px);
+}
+.sheet.show { transform: translateY(0); }
+.sheet-handle {
+  width: 36px; height: 5px;
+  background: var(--hair);
+  border-radius: 3px;
+  margin: 10px auto 6px;
+  flex-shrink: 0;
+}
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 18px 4px;
+  flex-shrink: 0;
+}
+.sheet-title { font-size: 17px; font-weight: 700; }
+.sheet-close {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--bg-3);
+  border: none;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-1);
+  flex-shrink: 0;
+}
+.sheet-body {
+  padding: 14px 18px 4px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.sheet-actions {
+  padding: 12px 18px 0;
+  flex-shrink: 0;
+}
+
+/* Toast / alert modal */
+.alert-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.32);
+  z-index: 200;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.alert-overlay.show { opacity: 1; pointer-events: auto; }
+.alert-box {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -46%) scale(0.92);
+  width: min(300px, 84vw);
+  background: var(--bg-2);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8);
+  backdrop-filter: blur(30px) saturate(1.8);
+  border-radius: 22px;
+  border: 0.5px solid var(--hair);
+  box-shadow: var(--shadow-2);
+  z-index: 201;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+  overflow: hidden;
+}
+.alert-overlay.show + .alert-box, .alert-box.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: auto;
+}
+.alert-content { padding: 22px 20px 16px; text-align: center; }
+.alert-title { font-size: 16.5px; font-weight: 700; margin-bottom: 4px; }
+.alert-msg { font-size: 14px; color: var(--ink-1); line-height: 1.4; }
+.alert-actions { display: flex; border-top: 0.5px solid var(--hair); }
+.alert-actions button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 13px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 550;
+  color: var(--accent);
+  border-right: 0.5px solid var(--hair);
+}
+.alert-actions button:last-child { border-right: none; }
+.alert-actions button.destructive { color: var(--bad); font-weight: 650; }
+
+/* Empty state */
+.empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--ink-2);
+}
+.empty svg { width: 40px; height: 40px; margin-bottom: 10px; opacity: 0.6; }
+.empty-title { font-size: 15px; font-weight: 650; color: var(--ink-1); margin-bottom: 3px; }
+.empty-sub { font-size: 13px; }
+
+.hairline-top { border-top: 0.5px solid var(--hair); margin-top: 14px; padding-top: 14px; }
+
+.big-num {
+  font-size: 44px;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.mono { font-variant-numeric: tabular-nums; }
+
+::-webkit-scrollbar { display: none; }
+
+.swipe-actions {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  display: flex;
+}
+.swipe-btn {
+  width: 64px;
+  border: none;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 650;
+  display: flex; align-items: center; justify-content: center;
+}
+</style>
+</head>
+<body>
+
+<div class="ambient"></div>
+
+<div class="topbar" id="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-title" id="topbarTitle">Répartition</div>
+    <div class="topbar-sub" id="topbarSub"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="screen active" id="screen-main"></div>
+  <div class="screen" id="screen-settings"></div>
+</div>
+
+<div class="tabbar">
+  <button class="tab-btn active" data-tab="main">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2 7-7 7 7 2 2"/><path d="M5 10v10a1 1 0 001 1h4a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h4a1 1 0 001-1V10"/></svg>
+    Accueil
+  </button>
+  <button class="tab-btn" data-tab="settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    Réglages
+  </button>
+</div>
+
+<div class="sheet-overlay" id="sheetOverlay"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <div class="sheet-title" id="sheetTitle">Titre</div>
+    <button class="sheet-close" id="sheetClose">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+
+<div class="alert-overlay" id="alertOverlay"></div>
+<div class="alert-box" id="alertBox">
+  <div class="alert-content">
+    <div class="alert-title" id="alertTitle">Titre</div>
+    <div class="alert-msg" id="alertMsg">Message</div>
+  </div>
+  <div class="alert-actions" id="alertActions"></div>
+</div>
+
+<script>
+/* ============================================================
+   DATA LAYER
+============================================================ */
+const STORAGE_KEY = 'repartition_v1';
+
+const ICONS = {
+  account: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+  wallet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg>',
+  trend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>',
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+  chevron: '<svg viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l6 6-6 6"/></svg>',
+  euro: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 5a7 7 0 100 14M4 10h9M4 14h7"/></svg>',
+  repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>',
+  card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>',
+  bank: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M3 10h18M5 6l7-4 7 4M4 10v11M20 10v11M9 10v11M15 10v11"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41L11 3.83A2 2 0 009.59 3H4a1 1 0 00-1 1v5.59a2 2 0 00.59 1.41l9.58 9.58a2 2 0 002.82 0l4.6-4.6a2 2 0 000-2.82z"/><circle cx="7.5" cy="7.5" r="1"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4z"/></svg>',
+  star: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+};
+
+const ACCOUNT_TYPES = {
+  perso:    { label: 'Personnel',  color: '#3A7BFF', icon: ICONS.wallet },
+  commun:   { label: 'Commun',     color: '#2FB670', icon: ICONS.users },
+  placement:{ label: 'Placement',  color: '#7A5CFF', icon: ICONS.trend },
+  autre:    { label: 'Autre',      color: '#8A8A93', icon: ICONS.account },
+};
+
+const EXEC_MODES = {
+  prelevement: { label: 'Prélèvement', icon: ICONS.bank },
+  carte:       { label: 'Carte de crédit', icon: ICONS.card },
+  virement:    { label: 'Virement manuel', icon: ICONS.repeat },
+};
+
+const RECURRENCES = {
+  once:        { label: 'Une fois' },
+  weekly:      { label: 'Chaque semaine' },
+  biweekly:    { label: 'Aux 2 semaines' },
+  monthly:     { label: 'Mensuel' },
+  bimonthly:   { label: '2x / mois' },
+};
+
+const DEFAULT_CATEGORIES = ['Logement', 'Épicerie', 'Transport', 'Abonnements', 'Épargne', 'Assurances', 'Autre'];
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function loadData() {
+  let raw;
+  try { raw = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e) { raw = null; }
+  if (!raw) {
+    raw = {
+      accounts: [],
+      expenses: [],
+      categories: [...DEFAULT_CATEGORIES],
+      defaultAccountId: null,
+      payHistory: [],
+      fxRateEURtoCAD: null,
+      fxRateFetchedAt: null,
+    };
+  }
+  if (!raw.categories) raw.categories = [...DEFAULT_CATEGORIES];
+  if (!raw.payHistory) raw.payHistory = [];
+  return raw;
+}
+
+let DATA = loadData();
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }
+
+/* ============================================================
+   FORMATTERS
+============================================================ */
+function fmtCAD(n) {
+  return new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+}
+function fmtEUR(n) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+}
+function fmtDateShort(d) {
+  return new Intl.DateTimeFormat('fr-CA', { day: 'numeric', month: 'short' }).format(new Date(d));
+}
+
+/* ============================================================
+   CALCUL DE RÉPARTITION
+============================================================ */
+// Montant CAD effectif d'une dépense (gère conversion EUR->CAD)
+function expenseAmountCAD(exp) {
+  if (exp.currency === 'EUR') {
+    const rate = DATA.fxRateEURtoCAD || 1.47; // fallback approximatif si pas de connexion
+    return exp.amount * rate;
+  }
+  return exp.amount;
+}
+
+// Montant "par paie" en tenant compte de la récurrence (paie aux 2 semaines)
+// - monthly: montant mensuel divisé par 2 (réparti sur les 2 paies du mois)
+// - bimonthly: montant déjà défini par occurrence (2x/mois = 1x/paie)
+// - weekly: montant hebdo x2 (2 semaines par période de paie)
+// - biweekly / once: montant tel quel
+function expensePerPayAmountCADFixed(exp) {
+  const base = expenseAmountCAD(exp);
+  switch (exp.recurrence) {
+    case 'monthly': return base / 2;
+    case 'bimonthly': return base;
+    case 'weekly': return base * 2;
+    case 'biweekly': return base;
+    case 'once': return base;
+    default: return base;
+  }
+}
+
+function computeRepartition(payAmount) {
+  const byAccount = {}; // accountId -> { total, items: [] }
+  DATA.accounts.forEach(a => byAccount[a.id] = { account: a, total: 0, items: [] });
+
+  DATA.expenses.forEach(exp => {
+    if (!byAccount[exp.accountId]) return;
+    const amt = expensePerPayAmountCADFixed(exp);
+    byAccount[exp.accountId].total += amt;
+    byAccount[exp.accountId].items.push({ ...exp, computedCAD: amt });
+  });
+
+  let totalAssigned = 0;
+  Object.values(byAccount).forEach(b => totalAssigned += b.total);
+
+  const remainder = Math.max(0, payAmount - totalAssigned);
+  if (DATA.defaultAccountId && byAccount[DATA.defaultAccountId]) {
+    byAccount[DATA.defaultAccountId].total += remainder;
+    byAccount[DATA.defaultAccountId].isDefault = true;
+    byAccount[DATA.defaultAccountId].remainderPart = remainder;
+  }
+
+  return {
+    payAmount,
+    totalAssigned,
+    remainder,
+    byAccount,
+    isOverBudget: totalAssigned > payAmount,
+    shortfall: Math.max(0, totalAssigned - payAmount),
+  };
+}
+
+/* ============================================================
+   FX RATE (live)
+============================================================ */
+async function fetchFxRate() {
+  try {
+    const res = await fetch('https://api.frankfurter.app/latest?from=EUR&to=CAD');
+    if (!res.ok) throw new Error('bad response');
+    const json = await res.json();
+    const rate = json.rates && json.rates.CAD;
+    if (rate) {
+      DATA.fxRateEURtoCAD = rate;
+      DATA.fxRateFetchedAt = Date.now();
+      save();
+      return rate;
+    }
+  } catch (e) {
+    console.warn('FX fetch failed, using cached/fallback rate', e);
+  }
+  return DATA.fxRateEURtoCAD || null;
+}
+
+/* ============================================================
+   UI HELPERS: sheet, alert
+============================================================ */
+const sheetEl = document.getElementById('sheet');
+const sheetOverlay = document.getElementById('sheetOverlay');
+const sheetTitle = document.getElementById('sheetTitle');
+const sheetBody = document.getElementById('sheetBody');
+document.getElementById('sheetClose').addEventListener('click', closeSheet);
+sheetOverlay.addEventListener('click', closeSheet);
+
+function openSheet(title, bodyHtml) {
+  sheetTitle.textContent = title;
+  sheetBody.innerHTML = bodyHtml;
+  sheetOverlay.classList.add('show');
+  sheetEl.classList.add('show');
+}
+function closeSheet() {
+  sheetOverlay.classList.remove('show');
+  sheetEl.classList.remove('show');
+}
+
+const alertOverlay = document.getElementById('alertOverlay');
+const alertBox = document.getElementById('alertBox');
+const alertTitle = document.getElementById('alertTitle');
+const alertMsg = document.getElementById('alertMsg');
+const alertActions = document.getElementById('alertActions');
+
+function showAlert({ title, message, buttons }) {
+  alertTitle.textContent = title || '';
+  alertMsg.textContent = message || '';
+  alertActions.innerHTML = '';
+  (buttons || [{ label: 'OK' }]).forEach(btn => {
+    const b = document.createElement('button');
+    b.textContent = btn.label;
+    if (btn.destructive) b.classList.add('destructive');
+    b.addEventListener('click', () => {
+      hideAlert();
+      if (btn.onClick) btn.onClick();
+    });
+    alertActions.appendChild(b);
+  });
+  alertOverlay.classList.add('show');
+  alertBox.classList.add('show');
+}
+function hideAlert() {
+  alertOverlay.classList.remove('show');
+  alertBox.classList.remove('show');
+}
+function confirmDelete(itemLabel, onConfirm) {
+  showAlert({
+    title: 'Supprimer ?',
+    message: `« ${itemLabel} » sera supprimé définitivement.`,
+    buttons: [
+      { label: 'Annuler' },
+      { label: 'Supprimer', destructive: true, onClick: onConfirm },
+    ]
+  });
+}
+
+/* ============================================================
+   TAB NAVIGATION
+============================================================ */
+const screens = {
+  main: document.getElementById('screen-main'),
+  settings: document.getElementById('screen-settings'),
+};
+const topbarTitle = document.getElementById('topbarTitle');
+const topbarSub = document.getElementById('topbarSub');
+
+function goTab(tab) {
+  Object.keys(screens).forEach(k => screens[k].classList.toggle('active', k === tab));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  if (tab === 'main') {
+    topbarTitle.textContent = 'Répartition';
+    topbarSub.textContent = new Intl.DateTimeFormat('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+    renderMain();
+  } else {
+    topbarTitle.textContent = 'Réglages';
+    topbarSub.textContent = `${DATA.accounts.length} compte${DATA.accounts.length>1?'s':''} · ${DATA.expenses.length} dépense${DATA.expenses.length>1?'s':''}`;
+    renderSettings();
+  }
+}
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => goTab(btn.dataset.tab));
+});
+
+/* ============================================================
+   MAIN SCREEN
+============================================================ */
+let currentPayInput = '';
+
+function renderMain() {
+  const hasAccounts = DATA.accounts.length > 0;
+  const rate = DATA.fxRateEURtoCAD;
+  const rateAge = DATA.fxRateFetchedAt ? Math.round((Date.now() - DATA.fxRateFetchedAt) / 60000) : null;
+
+  let html = '';
+
+  // Pay input card
+  html += `
+  <div class="card-solid" style="padding:22px 20px;">
+    <div class="field-label" style="margin-bottom:8px;">Montant de la prochaine paie</div>
+    <div style="display:flex; align-items:baseline; gap:6px;">
+      <span style="font-size:30px; font-weight:700; color:var(--ink-1);">$</span>
+      <input id="payAmountInput" inputmode="decimal" placeholder="0.00" value="${currentPayInput}"
+        style="border:none; background:transparent; padding:0; font-size:44px; font-weight:780; letter-spacing:-0.02em; flex:1;" />
+    </div>
+  </div>`;
+
+  if (!hasAccounts) {
+    html += `
+    <div class="empty">
+      ${ICONS.wallet}
+      <div class="empty-title">Aucun compte configuré</div>
+      <div class="empty-sub">Ajoute tes comptes dans Réglages pour voir la répartition ici.</div>
+    </div>`;
+    screens.main.innerHTML = html;
+    attachPayInputEvents();
+    return;
+  }
+
+  const payAmount = parseFloat(currentPayInput.replace(',', '.')) || 0;
+
+  if (payAmount <= 0) {
+    html += `
+    <div class="empty">
+      ${ICONS.trend}
+      <div class="empty-title">Entre le montant de ta paie</div>
+      <div class="empty-sub">La répartition entre tes comptes s'affichera automatiquement.</div>
+    </div>`;
+    screens.main.innerHTML = html;
+    attachPayInputEvents();
+    return;
+  }
+
+  const rep = computeRepartition(payAmount);
+
+  // Summary card
+  html += `
+  <div class="section-label">Résumé</div>
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div class="row-sub">Total à répartir</div>
+        <div class="big-num" style="font-size:26px;">${fmtCAD(rep.totalAssigned)}</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="row-sub">${rep.remainder > 0 ? 'Surplus (compte défaut)' : 'Surplus'}</div>
+        <div class="big-num" style="font-size:26px; color:${rep.remainder>0?'var(--good)':'var(--ink-2)'};">${fmtCAD(rep.remainder)}</div>
+      </div>
+    </div>
+    ${rep.isOverBudget ? `
+    <div class="hairline-top" style="display:flex; gap:8px; align-items:center; color:var(--bad); font-size:13px; font-weight:650;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      Manque ${fmtCAD(rep.shortfall)} pour couvrir toutes les dépenses
+    </div>` : ''}
+    ${rate ? `<div class="hairline-top row-sub">Taux EUR→CAD : ${rate.toFixed(4)} ${rateAge!==null ? `(mis à jour il y a ${rateAge < 1 ? "moins d'1 min" : rateAge + ' min'})` : ''}</div>` : ''}
+  </div>`;
+
+  // Per-account breakdown
+  html += `<div class="section-label">Répartition par compte</div>`;
+  html += `<div class="list">`;
+  const accountsSorted = [...DATA.accounts].sort((a,b) => (rep.byAccount[b.id].total) - (rep.byAccount[a.id].total));
+  accountsSorted.forEach(acc => {
+    const b = rep.byAccount[acc.id];
+    const type = ACCOUNT_TYPES[acc.type] || ACCOUNT_TYPES.autre;
+    if (b.total <= 0 && b.items.length === 0 && !b.isDefault) return;
+    html += `
+    <div class="row row-tap" onclick="openAccountDetail('${acc.id}', ${payAmount})">
+      <div class="row-icon" style="background:${type.color};">${type.icon}</div>
+      <div class="row-main">
+        <div class="row-title">${acc.name}${b.isDefault ? ' <span style="font-size:11px; color:var(--good); font-weight:700;">· DÉFAUT</span>' : ''}</div>
+        <div class="row-sub">${type.label} · ${b.items.length} dépense${b.items.length>1?'s':''}${b.isDefault && b.remainderPart>0 ? ' + surplus' : ''}</div>
+      </div>
+      <div class="row-value">${fmtCAD(b.total)}</div>
+      <div class="row-chevron">${ICONS.chevron}</div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  // History
+  if (DATA.payHistory.length > 0) {
+    html += `<div class="section-label">Historique récent</div><div class="list">`;
+    DATA.payHistory.slice(-5).reverse().forEach(h => {
+      html += `
+      <div class="row">
+        <div class="row-icon" style="background:var(--ink-2);">${ICONS.wallet}</div>
+        <div class="row-main">
+          <div class="row-title">${fmtCAD(h.amount)}</div>
+          <div class="row-sub">${fmtDateShort(h.date)}</div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  screens.main.innerHTML = html;
+  attachPayInputEvents();
+}
+
+function attachPayInputEvents() {
+  const inp = document.getElementById('payAmountInput');
+  if (!inp) return;
+  inp.addEventListener('input', (e) => {
+    currentPayInput = e.target.value;
+    renderMain();
+    // restore focus & cursor at end after re-render
+    requestAnimationFrame(() => {
+      const newInp = document.getElementById('payAmountInput');
+      if (newInp) { newInp.focus(); newInp.setSelectionRange(newInp.value.length, newInp.value.length); }
+    });
+  });
+}
+
+function openAccountDetail(accountId, payAmount) {
+  const rep = computeRepartition(payAmount);
+  const b = rep.byAccount[accountId];
+  if (!b) return;
+  const acc = b.account;
+  const type = ACCOUNT_TYPES[acc.type] || ACCOUNT_TYPES.autre;
+
+  let itemsHtml = '';
+  if (b.items.length === 0 && !b.isDefault) {
+    itemsHtml = `<div class="empty" style="padding:24px 10px;"><div class="empty-sub">Aucune dépense assignée à ce compte.</div></div>`;
+  } else {
+    itemsHtml += `<div class="list">`;
+    b.items.forEach(it => {
+      const mode = EXEC_MODES[it.execMode] || EXEC_MODES.virement;
+      const rec = RECURRENCES[it.recurrence] || RECURRENCES.once;
+      const isEur = it.currency === 'EUR';
+      itemsHtml += `
+      <div class="row">
+        <div class="row-icon" style="background:${isEur ? 'var(--euro)' : 'var(--ink-2)'};">${isEur ? ICONS.euro : mode.icon}</div>
+        <div class="row-main">
+          <div class="row-title">${it.name}</div>
+          <div class="row-sub">${it.category} · ${mode.label} · ${rec.label}${isEur ? ` · ${fmtEUR(it.amount)}` : ''}</div>
+        </div>
+        <div class="row-value">${fmtCAD(it.computedCAD)}</div>
+      </div>`;
+    });
+    itemsHtml += `</div>`;
+    if (b.isDefault && b.remainderPart > 0) {
+      itemsHtml += `
+      <div class="list" style="margin-top:10px;">
+        <div class="row">
+          <div class="row-icon" style="background:var(--good);">${ICONS.check}</div>
+          <div class="row-main">
+            <div class="row-title">Surplus (après dépenses)</div>
+            <div class="row-sub">Compte par défaut</div>
+          </div>
+          <div class="row-value">${fmtCAD(b.remainderPart)}</div>
+        </div>
+      </div>`;
+    }
+  }
+
+  openSheet(acc.name, `
+    <div class="card" style="text-align:center; padding:24px 16px;">
+      <div class="row-sub">${type.label}</div>
+      <div class="big-num" style="font-size:34px; margin-top:2px;">${fmtCAD(b.total)}</div>
+      <div class="row-sub" style="margin-top:2px;">à envoyer sur cette paie</div>
+    </div>
+    ${itemsHtml}
+  `);
+}
+
+/* ============================================================
+   SETTINGS SCREEN
+============================================================ */
+function renderSettings() {
+  let html = '';
+
+  // Accounts section
+  html += `<div class="section-label">Comptes</div>`;
+  if (DATA.accounts.length === 0) {
+    html += `<div class="list"><div class="empty" style="padding:28px 10px;">${ICONS.wallet}<div class="empty-title">Aucun compte</div><div class="empty-sub">Ajoute ton premier compte ci-dessous.</div></div></div>`;
+  } else {
+    html += `<div class="list">`;
+    DATA.accounts.forEach(acc => {
+      const type = ACCOUNT_TYPES[acc.type] || ACCOUNT_TYPES.autre;
+      const isDefault = DATA.defaultAccountId === acc.id;
+      html += `
+      <div class="row row-tap" onclick="openAccountForm('${acc.id}')">
+        <div class="row-icon" style="background:${type.color};">${type.icon}</div>
+        <div class="row-main">
+          <div class="row-title">${acc.name} ${isDefault ? `<span style="color:var(--good);">${ICONS.star.replace('width="24" height="24"','width="11" height="11"')}</span>` : ''}</div>
+          <div class="row-sub">${type.label}${acc.currency && acc.currency !== 'CAD' ? ' · ' + acc.currency : ''}</div>
+        </div>
+        <div class="row-chevron">${ICONS.chevron}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  html += `<button class="btn btn-ghost" onclick="openAccountForm(null)" style="margin-bottom:4px;">${ICONS.plus.replace('width="24" height="24"','width="17" height="17"')} Ajouter un compte</button>`;
+
+  // Expenses section
+  html += `<div class="section-label">Dépenses</div>`;
+  if (DATA.expenses.length === 0) {
+    html += `<div class="list"><div class="empty" style="padding:28px 10px;">${ICONS.tag}<div class="empty-title">Aucune dépense</div><div class="empty-sub">Ajoute tes dépenses récurrentes ci-dessous.</div></div></div>`;
+  } else {
+    html += `<div class="list">`;
+    const sorted = [...DATA.expenses].sort((a,b) => a.name.localeCompare(b.name));
+    sorted.forEach(exp => {
+      const acc = DATA.accounts.find(a => a.id === exp.accountId);
+      const mode = EXEC_MODES[exp.execMode] || EXEC_MODES.virement;
+      const rec = RECURRENCES[exp.recurrence] || RECURRENCES.once;
+      const isEur = exp.currency === 'EUR';
+      html += `
+      <div class="row row-tap" onclick="openExpenseForm('${exp.id}')">
+        <div class="row-icon" style="background:${isEur ? 'var(--euro)' : 'var(--ink-2)'};">${isEur ? ICONS.euro : mode.icon}</div>
+        <div class="row-main">
+          <div class="row-title">${exp.name}</div>
+          <div class="row-sub">${exp.category} · ${acc ? acc.name : '—'} · ${rec.label}</div>
+        </div>
+        <div class="row-value">${isEur ? fmtEUR(exp.amount) : fmtCAD(exp.amount)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  html += `<button class="btn btn-ghost" onclick="openExpenseForm(null)" style="margin-bottom:4px;">${ICONS.plus.replace('width="24" height="24"','width="17" height="17"')} Ajouter une dépense</button>`;
+
+  // General settings
+  html += `<div class="section-label">Général</div>`;
+  html += `<div class="list">
+    <div class="row row-tap" onclick="openDefaultAccountPicker()">
+      <div class="row-icon" style="background:var(--good);">${ICONS.check}</div>
+      <div class="row-main">
+        <div class="row-title">Compte par défaut</div>
+        <div class="row-sub">Reçoit le surplus après répartition</div>
+      </div>
+      <div class="row-value" style="font-size:14px; color:var(--ink-1);">${DATA.defaultAccountId ? (DATA.accounts.find(a=>a.id===DATA.defaultAccountId)?.name || '—') : 'Aucun'}</div>
+    </div>
+    <div class="row row-tap" onclick="openCategoriesManager()">
+      <div class="row-icon" style="background:var(--warn);">${ICONS.tag}</div>
+      <div class="row-main">
+        <div class="row-title">Catégories de dépenses</div>
+        <div class="row-sub">${DATA.categories.length} catégorie${DATA.categories.length>1?'s':''}</div>
+      </div>
+      <div class="row-chevron">${ICONS.chevron}</div>
+    </div>
+    <div class="row row-tap" onclick="refreshFxRateManual()">
+      <div class="row-icon" style="background:var(--euro);">${ICONS.euro}</div>
+      <div class="row-main">
+        <div class="row-title">Taux de change EUR → CAD</div>
+        <div class="row-sub">${DATA.fxRateEURtoCAD ? DATA.fxRateEURtoCAD.toFixed(4) : 'Non récupéré'}</div>
+      </div>
+      <div class="row-value" style="font-size:13px; color:var(--accent);">Actualiser</div>
+    </div>
+  </div>`;
+
+  screens.settings.innerHTML = html;
+}
+
+/* ---------- Account form ---------- */
+function openAccountForm(accountId) {
+  const isEdit = !!accountId;
+  const acc = isEdit ? DATA.accounts.find(a => a.id === accountId) : { name: '', type: 'perso', currency: 'CAD' };
+
+  const typeChips = Object.entries(ACCOUNT_TYPES).map(([key, t]) =>
+    `<button type="button" class="chip ${acc.type===key?'active':''}" data-type-chip="${key}">${t.label}</button>`
+  ).join('');
+
+  openSheet(isEdit ? 'Modifier le compte' : 'Nouveau compte', `
+    <div class="field">
+      <label class="field-label">Nom du compte</label>
+      <input id="f_name" type="text" placeholder="Ex: Compte commun, Épargne..." value="${acc.name || ''}" />
+    </div>
+    <div class="field">
+      <label class="field-label">Type</label>
+      <div class="chip-row" id="f_typeChips">${typeChips}</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Devise du compte</label>
+      <select id="f_currency">
+        <option value="CAD" ${acc.currency==='CAD'?'selected':''}>CAD — Dollar canadien</option>
+        <option value="EUR" ${acc.currency==='EUR'?'selected':''}>EUR — Euro</option>
+      </select>
+    </div>
+    <div class="sheet-actions" style="padding:6px 0 0;">
+      <button class="btn btn-accent" onclick="saveAccountForm('${accountId||''}')">Enregistrer</button>
+      ${isEdit ? `<div style="height:10px;"></div><button class="btn btn-danger" onclick="deleteAccount('${accountId}')">Supprimer ce compte</button>` : ''}
+    </div>
+  `);
+
+  let selectedType = acc.type;
+  document.querySelectorAll('#f_typeChips .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      selectedType = chip.dataset.typeChip;
+      document.querySelectorAll('#f_typeChips .chip').forEach(c => c.classList.toggle('active', c === chip));
+    });
+  });
+  window._currentAccountFormType = () => selectedType;
+}
+
+function saveAccountForm(accountId) {
+  const name = document.getElementById('f_name').value.trim();
+  const currency = document.getElementById('f_currency').value;
+  const type = window._currentAccountFormType ? window._currentAccountFormType() : 'perso';
+
+  if (!name) {
+    showAlert({ title: 'Nom requis', message: 'Donne un nom à ce compte pour continuer.' });
+    return;
+  }
+
+  if (accountId) {
+    const acc = DATA.accounts.find(a => a.id === accountId);
+    acc.name = name; acc.type = type; acc.currency = currency;
+  } else {
+    const newAcc = { id: uid(), name, type, currency };
+    DATA.accounts.push(newAcc);
+    if (!DATA.defaultAccountId) DATA.defaultAccountId = newAcc.id;
+  }
+  save();
+  closeSheet();
+  renderSettings();
+}
+
+function deleteAccount(accountId) {
+  const acc = DATA.accounts.find(a => a.id === accountId);
+  if (!acc) return;
+  confirmDelete(acc.name, () => {
+    DATA.accounts = DATA.accounts.filter(a => a.id !== accountId);
+    DATA.expenses = DATA.expenses.filter(e => e.accountId !== accountId);
+    if (DATA.defaultAccountId === accountId) DATA.defaultAccountId = DATA.accounts[0]?.id || null;
+    save();
+    closeSheet();
+    renderSettings();
+  });
+}
+
+function openDefaultAccountPicker() {
+  if (DATA.accounts.length === 0) {
+    showAlert({ title: 'Aucun compte', message: 'Ajoute d\'abord un compte pour pouvoir le désigner par défaut.' });
+    return;
+  }
+  let rows = DATA.accounts.map(acc => {
+    const type = ACCOUNT_TYPES[acc.type] || ACCOUNT_TYPES.autre;
+    const isSel = DATA.defaultAccountId === acc.id;
+    return `
+    <div class="row row-tap" onclick="setDefaultAccount('${acc.id}')">
+      <div class="row-icon" style="background:${type.color};">${type.icon}</div>
+      <div class="row-main"><div class="row-title">${acc.name}</div><div class="row-sub">${type.label}</div></div>
+      ${isSel ? `<div style="color:var(--good);">${ICONS.check}</div>` : ''}
+    </div>`;
+  }).join('');
+  openSheet('Compte par défaut', `<div class="list">${rows}</div>`);
+}
+function setDefaultAccount(accountId) {
+  DATA.defaultAccountId = accountId;
+  save();
+  closeSheet();
+  renderSettings();
+}
+
+/* ---------- Expense form ---------- */
+function openExpenseForm(expenseId) {
+  if (DATA.accounts.length === 0) {
+    showAlert({ title: 'Aucun compte', message: 'Ajoute d\'abord un compte avant de créer une dépense.' });
+    return;
+  }
+  const isEdit = !!expenseId;
+  const exp = isEdit ? DATA.expenses.find(e => e.id === expenseId) : {
+    name: '', category: DATA.categories[0], amount: '', currency: 'CAD',
+    accountId: DATA.accounts[0].id, execMode: 'prelevement', recurrence: 'monthly',
+    date: new Date().toISOString().slice(0,10),
+  };
+
+  const catOptions = DATA.categories.map(c => `<option value="${c}" ${exp.category===c?'selected':''}>${c}</option>`).join('');
+  const accOptions = DATA.accounts.map(a => `<option value="${a.id}" ${exp.accountId===a.id?'selected':''}>${a.name}</option>`).join('');
+  const modeChips = Object.entries(EXEC_MODES).map(([key,m]) =>
+    `<button type="button" class="chip ${exp.execMode===key?'active':''}" data-mode-chip="${key}">${m.label}</button>`
+  ).join('');
+  const recOptions = Object.entries(RECURRENCES).map(([key,r]) => `<option value="${key}" ${exp.recurrence===key?'selected':''}>${r.label}</option>`).join('');
+
+  openSheet(isEdit ? 'Modifier la dépense' : 'Nouvelle dépense', `
+    <div class="field">
+      <label class="field-label">Nom</label>
+      <input id="e_name" type="text" placeholder="Ex: Loyer, Netflix, Assurance auto..." value="${exp.name || ''}" />
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label class="field-label">Montant</label>
+        <input id="e_amount" inputmode="decimal" placeholder="0.00" value="${exp.amount || ''}" />
+      </div>
+      <div class="field" style="max-width:110px;">
+        <label class="field-label">Devise</label>
+        <select id="e_currency">
+          <option value="CAD" ${exp.currency==='CAD'?'selected':''}>CAD</option>
+          <option value="EUR" ${exp.currency==='EUR'?'selected':''}>EUR</option>
+        </select>
+      </div>
+    </div>
+    <div class="field" id="e_fxPreview" style="display:${exp.currency==='EUR'?'block':'none'};"></div>
+    <div class="field">
+      <label class="field-label">Catégorie</label>
+      <select id="e_category">${catOptions}</select>
+    </div>
+    <div class="field">
+      <label class="field-label">Compte destination</label>
+      <select id="e_account">${accOptions}</select>
+    </div>
+    <div class="field">
+      <label class="field-label">Mode d'exécution</label>
+      <div class="chip-row" id="e_modeChips">${modeChips}</div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label class="field-label">Date</label>
+        <input id="e_date" type="date" value="${exp.date || ''}" />
+      </div>
+      <div class="field">
+        <label class="field-label">Récurrence</label>
+        <select id="e_recurrence">${recOptions}</select>
+      </div>
+    </div>
+    <div class="sheet-actions" style="padding:6px 0 0;">
+      <button class="btn btn-accent" onclick="saveExpenseForm('${expenseId||''}')">Enregistrer</button>
+      ${isEdit ? `<div style="height:10px;"></div><button class="btn btn-danger" onclick="deleteExpense('${expenseId}')">Supprimer cette dépense</button>` : ''}
+    </div>
+  `);
+
+  let selectedMode = exp.execMode;
+  document.querySelectorAll('#e_modeChips .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      selectedMode = chip.dataset.modeChip;
+      document.querySelectorAll('#e_modeChips .chip').forEach(c => c.classList.toggle('active', c === chip));
+    });
+  });
+  window._currentExpenseFormMode = () => selectedMode;
+
+  function updateFxPreview() {
+    const cur = document.getElementById('e_currency').value;
+    const amtRaw = document.getElementById('e_amount').value;
+    const amt = parseFloat((amtRaw||'').replace(',', '.')) || 0;
+    const preview = document.getElementById('e_fxPreview');
+    if (cur === 'EUR' && amt > 0) {
+      const rate = DATA.fxRateEURtoCAD;
+      preview.style.display = 'block';
+      if (rate) {
+        preview.innerHTML = `<div class="row-sub" style="padding-left:2px;">≈ ${fmtCAD(amt * rate)} au taux actuel (${rate.toFixed(4)})</div>`;
+      } else {
+        preview.innerHTML = `<div class="row-sub" style="padding-left:2px; color:var(--warn);">Taux de change non disponible — sera calculé à l'affichage.</div>`;
+      }
+    } else {
+      preview.style.display = 'none';
+    }
+  }
+  document.getElementById('e_currency').addEventListener('change', updateFxPreview);
+  document.getElementById('e_amount').addEventListener('input', updateFxPreview);
+  updateFxPreview();
+}
+
+function saveExpenseForm(expenseId) {
+  const name = document.getElementById('e_name').value.trim();
+  const amount = parseFloat(document.getElementById('e_amount').value.replace(',', '.'));
+  const currency = document.getElementById('e_currency').value;
+  const category = document.getElementById('e_category').value;
+  const accountId = document.getElementById('e_account').value;
+  const date = document.getElementById('e_date').value;
+  const recurrence = document.getElementById('e_recurrence').value;
+  const execMode = window._currentExpenseFormMode ? window._currentExpenseFormMode() : 'prelevement';
+
+  if (!name || !amount || amount <= 0) {
+    showAlert({ title: 'Champs incomplets', message: 'Vérifie le nom et le montant de la dépense.' });
+    return;
+  }
+
+  const payload = { name, amount, currency, category, accountId, date, recurrence, execMode };
+
+  if (expenseId) {
+    const idx = DATA.expenses.findIndex(e => e.id === expenseId);
+    DATA.expenses[idx] = { ...DATA.expenses[idx], ...payload };
+  } else {
+    DATA.expenses.push({ id: uid(), ...payload });
+  }
+  save();
+  closeSheet();
+  renderSettings();
+
+  if (currency === 'EUR' && !DATA.fxRateEURtoCAD) {
+    fetchFxRate().then(() => renderSettings());
+  }
+}
+
+function deleteExpense(expenseId) {
+  const exp = DATA.expenses.find(e => e.id === expenseId);
+  if (!exp) return;
+  confirmDelete(exp.name, () => {
+    DATA.expenses = DATA.expenses.filter(e => e.id !== expenseId);
+    save();
+    closeSheet();
+    renderSettings();
+  });
+}
+
+/* ---------- Categories manager ---------- */
+function openCategoriesManager() {
+  renderCategoriesSheet();
+}
+function renderCategoriesSheet() {
+  let rows = DATA.categories.map(cat => {
+    const inUse = DATA.expenses.some(e => e.category === cat);
+    return `
+    <div class="row">
+      <div class="row-icon" style="background:var(--warn);">${ICONS.tag}</div>
+      <div class="row-main"><div class="row-title">${cat}</div></div>
+      <button class="btn btn-sm btn-danger" onclick="deleteCategory('${cat.replace(/'/g,"\\'")}')" ${inUse ? 'disabled style="opacity:0.35;"' : ''}>Suppr.</button>
+    </div>`;
+  }).join('');
+
+  openSheet('Catégories', `
+    <div class="list">${rows}</div>
+    <div class="field" style="margin-top:16px;">
+      <label class="field-label">Nouvelle catégorie</label>
+      <div style="display:flex; gap:8px;">
+        <input id="newCatInput" type="text" placeholder="Ex: Santé, Loisirs..." style="flex:1;" />
+        <button class="btn btn-accent btn-sm" onclick="addCategory()">Ajouter</button>
+      </div>
+    </div>
+  `);
+}
+function addCategory() {
+  const inp = document.getElementById('newCatInput');
+  const val = inp.value.trim();
+  if (!val) return;
+  if (DATA.categories.includes(val)) {
+    showAlert({ title: 'Déjà existante', message: 'Cette catégorie existe déjà.' });
+    return;
+  }
+  DATA.categories.push(val);
+  save();
+  renderCategoriesSheet();
+  renderSettings();
+}
+function deleteCategory(cat) {
+  const inUse = DATA.expenses.some(e => e.category === cat);
+  if (inUse) {
+    showAlert({ title: 'Catégorie utilisée', message: 'Cette catégorie est utilisée par au moins une dépense. Modifie ces dépenses avant de la supprimer.' });
+    return;
+  }
+  DATA.categories = DATA.categories.filter(c => c !== cat);
+  save();
+  renderCategoriesSheet();
+  renderSettings();
+}
+
+/* ---------- FX manual refresh ---------- */
+function refreshFxRateManual() {
+  showAlert({ title: 'Actualisation...', message: 'Récupération du taux de change en cours.' });
+  fetchFxRate().then(rate => {
+    hideAlert();
+    if (rate) {
+      showAlert({ title: 'Taux mis à jour', message: `1 EUR = ${rate.toFixed(4)} CAD` });
+    } else {
+      showAlert({ title: 'Connexion indisponible', message: "Impossible de récupérer le taux. Vérifie ta connexion internet. L'ancien taux (ou une estimation) sera utilisé." });
+    }
+    renderSettings();
+    renderMain();
+  });
+}
+
+/* ============================================================
+   INIT
+============================================================ */
+fetchFxRate();
+goTab('main');
+</script>
+</body>
+</html>
