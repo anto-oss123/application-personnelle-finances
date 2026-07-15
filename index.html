@@ -658,21 +658,25 @@ function expenseAmountCAD(exp) {
   return exp.amount;
 }
 
-// Montant "par paie" en tenant compte de la récurrence (paie aux 2 semaines)
-// - monthly: montant mensuel divisé par 2 (réparti sur les 2 paies du mois)
-// - bimonthly: montant déjà défini par occurrence (2x/mois = 1x/paie)
-// - weekly: montant hebdo x2 (2 semaines par période de paie)
-// - biweekly / once: montant tel quel
+// Pourcentage par défaut suggéré selon la récurrence, quand on crée une nouvelle dépense.
+// L'utilisateur peut ensuite l'ajuster librement (ex: 60/40 si une paie est plus proche
+// de la date d'échéance).
+function defaultPayPercent(recurrence) {
+  switch (recurrence) {
+    case 'monthly': return 50;   // 1x/mois -> réparti sur les 2 paies du mois
+    case 'bimonthly': return 100; // déjà 2x/mois, aligné sur le rythme de paie
+    case 'weekly': return 100;
+    case 'biweekly': return 100;
+    case 'once': return 100;
+    default: return 100;
+  }
+}
+
+// Montant "par paie" = montant CAD de la dépense × (payPercent / 100)
 function expensePerPayAmountCADFixed(exp) {
   const base = expenseAmountCAD(exp);
-  switch (exp.recurrence) {
-    case 'monthly': return base / 2;
-    case 'bimonthly': return base;
-    case 'weekly': return base * 2;
-    case 'biweekly': return base;
-    case 'once': return base;
-    default: return base;
-  }
+  const pct = (typeof exp.payPercent === 'number') ? exp.payPercent : defaultPayPercent(exp.recurrence);
+  return base * (pct / 100);
 }
 
 function computeRepartition(payAmount) {
@@ -818,23 +822,36 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 ============================================================ */
 let currentPayInput = '';
 
+// Rendu complet : appelé uniquement au changement d'onglet ou après une action
+// structurelle (ajout/suppression compte, etc). Ne JAMAIS l'appeler pendant
+// la frappe dans le champ de paie, sinon le clavier iOS clignote/se ferme.
 function renderMain() {
+  screens.main.innerHTML = `
+    <div class="card-solid" style="padding:18px 16px;">
+      <div class="field-label" style="margin-bottom:6px;">Montant de la prochaine paie</div>
+      <div style="display:flex; align-items:baseline; gap:5px;">
+        <span style="font-size:22px; font-weight:700; color:var(--ink-1);">$</span>
+        <input id="payAmountInput" inputmode="decimal" placeholder="0.00" value="${currentPayInput}"
+          style="border:none; background:transparent; padding:0; font-size:34px; font-weight:780; letter-spacing:-0.02em; flex:1;" />
+      </div>
+    </div>
+    <div id="mainResults"></div>
+  `;
+  attachPayInputEvents();
+  renderMainResults();
+}
+
+// Rendu du contenu sous le champ de saisie uniquement (répartition, historique, empty states).
+// C'est cette fonction qu'on appelle à chaque frappe — elle ne touche jamais à l'input.
+function renderMainResults() {
+  const target = document.getElementById('mainResults');
+  if (!target) return;
+
   const hasAccounts = DATA.accounts.length > 0;
   const rate = DATA.fxRateEURtoCAD;
   const rateAge = DATA.fxRateFetchedAt ? Math.round((Date.now() - DATA.fxRateFetchedAt) / 60000) : null;
 
   let html = '';
-
-  // Pay input card
-  html += `
-  <div class="card-solid" style="padding:18px 16px;">
-    <div class="field-label" style="margin-bottom:6px;">Montant de la prochaine paie</div>
-    <div style="display:flex; align-items:baseline; gap:5px;">
-      <span style="font-size:22px; font-weight:700; color:var(--ink-1);">$</span>
-      <input id="payAmountInput" inputmode="decimal" placeholder="0.00" value="${currentPayInput}"
-        style="border:none; background:transparent; padding:0; font-size:34px; font-weight:780; letter-spacing:-0.02em; flex:1;" />
-    </div>
-  </div>`;
 
   if (!hasAccounts) {
     html += `
@@ -843,8 +860,7 @@ function renderMain() {
       <div class="empty-title">Aucun compte configuré</div>
       <div class="empty-sub">Ajoute tes comptes dans Réglages pour voir la répartition ici.</div>
     </div>`;
-    screens.main.innerHTML = html;
-    attachPayInputEvents();
+    target.innerHTML = html;
     return;
   }
 
@@ -857,8 +873,7 @@ function renderMain() {
       <div class="empty-title">Entre le montant de ta paie</div>
       <div class="empty-sub">La répartition entre tes comptes s'affichera automatiquement.</div>
     </div>`;
-    screens.main.innerHTML = html;
-    attachPayInputEvents();
+    target.innerHTML = html;
     return;
   }
 
@@ -923,8 +938,7 @@ function renderMain() {
     html += `</div>`;
   }
 
-  screens.main.innerHTML = html;
-  attachPayInputEvents();
+  target.innerHTML = html;
 }
 
 function attachPayInputEvents() {
@@ -932,12 +946,7 @@ function attachPayInputEvents() {
   if (!inp) return;
   inp.addEventListener('input', (e) => {
     currentPayInput = e.target.value;
-    renderMain();
-    // restore focus & cursor at end after re-render
-    requestAnimationFrame(() => {
-      const newInp = document.getElementById('payAmountInput');
-      if (newInp) { newInp.focus(); newInp.setSelectionRange(newInp.value.length, newInp.value.length); }
-    });
+    renderMainResults();
   });
 }
 
@@ -957,12 +966,13 @@ function openAccountDetail(accountId, payAmount) {
       const mode = EXEC_MODES[it.execMode] || EXEC_MODES.virement;
       const rec = RECURRENCES[it.recurrence] || RECURRENCES.once;
       const isEur = it.currency === 'EUR';
+      const pct = (typeof it.payPercent === 'number') ? it.payPercent : defaultPayPercent(it.recurrence);
       itemsHtml += `
       <div class="row">
         <div class="row-icon" style="background:${isEur ? 'var(--euro)' : 'var(--ink-2)'};">${isEur ? ICONS.euro : mode.icon}</div>
         <div class="row-main">
           <div class="row-title">${it.name}</div>
-          <div class="row-sub">${it.category} · ${mode.label} · ${rec.label}${isEur ? ` · ${fmtEUR(it.amount)}` : ''}</div>
+          <div class="row-sub">${it.category} · ${rec.label} · ${pct}%${isEur ? ` · ${fmtEUR(it.amount)}` : ''}</div>
         </div>
         <div class="row-value">${fmtCAD(it.computedCAD)}</div>
       </div>`;
@@ -1034,12 +1044,13 @@ function renderSettings() {
       const mode = EXEC_MODES[exp.execMode] || EXEC_MODES.virement;
       const rec = RECURRENCES[exp.recurrence] || RECURRENCES.once;
       const isEur = exp.currency === 'EUR';
+      const pct = (typeof exp.payPercent === 'number') ? exp.payPercent : defaultPayPercent(exp.recurrence);
       html += `
       <div class="row row-tap" onclick="openExpenseForm('${exp.id}')">
         <div class="row-icon" style="background:${isEur ? 'var(--euro)' : 'var(--ink-2)'};">${isEur ? ICONS.euro : mode.icon}</div>
         <div class="row-main">
           <div class="row-title">${exp.name}</div>
-          <div class="row-sub">${exp.category} · ${acc ? acc.name : '—'} · ${rec.label}</div>
+          <div class="row-sub">${exp.category} · ${acc ? acc.name : '—'} · ${rec.label} · ${pct}%/paie</div>
         </div>
         <div class="row-value">${isEur ? fmtEUR(exp.amount) : fmtCAD(exp.amount)}</div>
       </div>`;
@@ -1242,11 +1253,24 @@ function openExpenseForm(expenseId) {
         <select id="e_recurrence">${recOptions}</select>
       </div>
     </div>
+    <div class="field">
+      <label class="field-label">Part couverte à chaque paie</label>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <input id="e_payPercent" type="number" inputmode="numeric" min="0" max="100" step="5"
+          value="${typeof exp.payPercent === 'number' ? exp.payPercent : defaultPayPercent(exp.recurrence)}"
+          style="width:90px; flex:none;" />
+        <span style="font-size:15px; font-weight:600; color:var(--ink-1);">%</span>
+        <div id="e_payPercentPreview" class="row-sub" style="flex:1; text-align:right;"></div>
+      </div>
+      <div class="row-sub" style="margin-top:6px; padding-left:2px;">Payé aux 2 semaines : 50% couvre la moitié d'une dépense mensuelle à chaque paie. 100% pour une dépense déjà alignée sur ton rythme de paie.</div>
+    </div>
     <div class="sheet-actions" style="padding:6px 0 0;">
       <button class="btn btn-accent" onclick="saveExpenseForm('${expenseId||''}')">Enregistrer</button>
       ${isEdit ? `<div style="height:10px;"></div><button class="btn btn-danger" onclick="deleteExpense('${expenseId}')">Supprimer cette dépense</button>` : ''}
     </div>
   `);
+
+  let payPercentTouched = isEdit; // si on édite une dépense existante, ne pas écraser son % déjà choisi
 
   let selectedMode = exp.execMode;
   document.querySelectorAll('#e_modeChips .chip').forEach(chip => {
@@ -1277,6 +1301,30 @@ function openExpenseForm(expenseId) {
   document.getElementById('e_currency').addEventListener('change', updateFxPreview);
   document.getElementById('e_amount').addEventListener('input', updateFxPreview);
   updateFxPreview();
+
+  function updatePayPercentPreview() {
+    const amtRaw = document.getElementById('e_amount').value;
+    const amt = parseFloat((amtRaw||'').replace(',', '.')) || 0;
+    const cur = document.getElementById('e_currency').value;
+    const pct = parseFloat(document.getElementById('e_payPercent').value) || 0;
+    const preview = document.getElementById('e_payPercentPreview');
+    if (amt <= 0) { preview.textContent = ''; return; }
+    const amtCAD = cur === 'EUR' ? amt * (DATA.fxRateEURtoCAD || 1.47) : amt;
+    preview.textContent = `= ${fmtCAD(amtCAD * (pct / 100))} par paie`;
+  }
+  document.getElementById('e_payPercent').addEventListener('input', () => {
+    payPercentTouched = true;
+    updatePayPercentPreview();
+  });
+  document.getElementById('e_amount').addEventListener('input', updatePayPercentPreview);
+  document.getElementById('e_currency').addEventListener('change', updatePayPercentPreview);
+  document.getElementById('e_recurrence').addEventListener('change', () => {
+    if (!payPercentTouched) {
+      document.getElementById('e_payPercent').value = defaultPayPercent(document.getElementById('e_recurrence').value);
+    }
+    updatePayPercentPreview();
+  });
+  updatePayPercentPreview();
 }
 
 function saveExpenseForm(expenseId) {
@@ -1288,13 +1336,16 @@ function saveExpenseForm(expenseId) {
   const date = document.getElementById('e_date').value;
   const recurrence = document.getElementById('e_recurrence').value;
   const execMode = window._currentExpenseFormMode ? window._currentExpenseFormMode() : 'prelevement';
+  let payPercent = parseFloat(document.getElementById('e_payPercent').value);
+  if (isNaN(payPercent)) payPercent = defaultPayPercent(recurrence);
+  payPercent = Math.min(100, Math.max(0, payPercent));
 
   if (!name || !amount || amount <= 0) {
     showAlert({ title: 'Champs incomplets', message: 'Vérifie le nom et le montant de la dépense.' });
     return;
   }
 
-  const payload = { name, amount, currency, category, accountId, date, recurrence, execMode };
+  const payload = { name, amount, currency, category, accountId, date, recurrence, execMode, payPercent };
 
   if (expenseId) {
     const idx = DATA.expenses.findIndex(e => e.id === expenseId);
