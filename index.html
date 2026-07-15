@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0A0A0C">
@@ -714,19 +714,37 @@ function computeRepartition(payAmount) {
    FX RATE (live)
 ============================================================ */
 async function fetchFxRate() {
+  // Nouvel endpoint (Frankfurter a migré vers api.frankfurter.dev en 2026).
   try {
-    const res = await fetch('https://api.frankfurter.app/latest?from=EUR&to=CAD');
-    if (!res.ok) throw new Error('bad response');
-    const json = await res.json();
-    const rate = json.rates && json.rates.CAD;
-    if (rate) {
-      DATA.fxRateEURtoCAD = rate;
-      DATA.fxRateFetchedAt = Date.now();
-      save();
-      return rate;
+    const res = await fetch('https://api.frankfurter.dev/v2/rate/EUR/CAD');
+    if (res.ok) {
+      const json = await res.json();
+      const rate = json && json.rate;
+      if (rate) {
+        DATA.fxRateEURtoCAD = rate;
+        DATA.fxRateFetchedAt = Date.now();
+        save();
+        return rate;
+      }
     }
   } catch (e) {
-    console.warn('FX fetch failed, using cached/fallback rate', e);
+    console.warn('FX fetch (v2) failed, trying fallback', e);
+  }
+  // Fallback sur l'ancien domaine, au cas où
+  try {
+    const res2 = await fetch('https://api.frankfurter.app/latest?from=EUR&to=CAD');
+    if (res2.ok) {
+      const json2 = await res2.json();
+      const rate2 = json2.rates && json2.rates.CAD;
+      if (rate2) {
+        DATA.fxRateEURtoCAD = rate2;
+        DATA.fxRateFetchedAt = Date.now();
+        save();
+        return rate2;
+      }
+    }
+  } catch (e2) {
+    console.warn('FX fetch (fallback) failed, using cached/fallback rate', e2);
   }
   return DATA.fxRateEURtoCAD || null;
 }
@@ -944,9 +962,17 @@ function renderMainResults() {
 function attachPayInputEvents() {
   const inp = document.getElementById('payAmountInput');
   if (!inp) return;
+  let lastParsed = null;
+  let debounceTimer = null;
   inp.addEventListener('input', (e) => {
     currentPayInput = e.target.value;
-    renderMainResults();
+    const parsed = parseFloat(currentPayInput.replace(',', '.')) || 0;
+    // Évite de re-render le bloc résultats pour chaque frappe intermédiaire identique
+    // (ex: appui sur une touche qui ne change pas la valeur numérique finale).
+    if (parsed === lastParsed) return;
+    lastParsed = parsed;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => renderMainResults(), 120);
   });
 }
 
@@ -1202,7 +1228,6 @@ function openExpenseForm(expenseId) {
   const exp = isEdit ? DATA.expenses.find(e => e.id === expenseId) : {
     name: '', category: DATA.categories[0], amount: '', currency: 'CAD',
     accountId: DATA.accounts[0].id, execMode: 'prelevement', recurrence: 'monthly',
-    date: new Date().toISOString().slice(0,10),
   };
 
   const catOptions = DATA.categories.map(c => `<option value="${c}" ${exp.category===c?'selected':''}>${c}</option>`).join('');
@@ -1243,25 +1268,19 @@ function openExpenseForm(expenseId) {
       <label class="field-label">Mode d'exécution</label>
       <div class="chip-row" id="e_modeChips">${modeChips}</div>
     </div>
-    <div class="field-row">
-      <div class="field">
-        <label class="field-label">Date</label>
-        <input id="e_date" type="date" value="${exp.date || ''}" />
-      </div>
-      <div class="field">
-        <label class="field-label">Récurrence</label>
-        <select id="e_recurrence">${recOptions}</select>
-      </div>
+    <div class="field">
+      <label class="field-label">Récurrence</label>
+      <select id="e_recurrence">${recOptions}</select>
     </div>
     <div class="field">
-      <label class="field-label">Part couverte à chaque paie</label>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <input id="e_payPercent" type="number" inputmode="numeric" min="0" max="100" step="5"
-          value="${typeof exp.payPercent === 'number' ? exp.payPercent : defaultPayPercent(exp.recurrence)}"
-          style="width:90px; flex:none;" />
-        <span style="font-size:15px; font-weight:600; color:var(--ink-1);">%</span>
-        <div id="e_payPercentPreview" class="row-sub" style="flex:1; text-align:right;"></div>
+      <div style="display:flex; align-items:baseline; justify-content:space-between;">
+        <label class="field-label" style="margin-bottom:0;">Part couverte à chaque paie</label>
+        <span id="e_payPercentValue" style="font-size:15px; font-weight:700; color:var(--accent);">${typeof exp.payPercent === 'number' ? exp.payPercent : defaultPayPercent(exp.recurrence)}%</span>
       </div>
+      <input id="e_payPercent" type="range" min="0" max="100" step="5"
+        value="${typeof exp.payPercent === 'number' ? exp.payPercent : defaultPayPercent(exp.recurrence)}"
+        style="width:100%; margin-top:10px; accent-color:var(--accent);" />
+      <div id="e_payPercentPreview" class="row-sub" style="margin-top:6px;"></div>
       <div class="row-sub" style="margin-top:6px; padding-left:2px;">Payé aux 2 semaines : 50% couvre la moitié d'une dépense mensuelle à chaque paie. 100% pour une dépense déjà alignée sur ton rythme de paie.</div>
     </div>
     <div class="sheet-actions" style="padding:6px 0 0;">
@@ -1307,6 +1326,7 @@ function openExpenseForm(expenseId) {
     const amt = parseFloat((amtRaw||'').replace(',', '.')) || 0;
     const cur = document.getElementById('e_currency').value;
     const pct = parseFloat(document.getElementById('e_payPercent').value) || 0;
+    document.getElementById('e_payPercentValue').textContent = pct + '%';
     const preview = document.getElementById('e_payPercentPreview');
     if (amt <= 0) { preview.textContent = ''; return; }
     const amtCAD = cur === 'EUR' ? amt * (DATA.fxRateEURtoCAD || 1.47) : amt;
@@ -1333,7 +1353,6 @@ function saveExpenseForm(expenseId) {
   const currency = document.getElementById('e_currency').value;
   const category = document.getElementById('e_category').value;
   const accountId = document.getElementById('e_account').value;
-  const date = document.getElementById('e_date').value;
   const recurrence = document.getElementById('e_recurrence').value;
   const execMode = window._currentExpenseFormMode ? window._currentExpenseFormMode() : 'prelevement';
   let payPercent = parseFloat(document.getElementById('e_payPercent').value);
@@ -1345,7 +1364,7 @@ function saveExpenseForm(expenseId) {
     return;
   }
 
-  const payload = { name, amount, currency, category, accountId, date, recurrence, execMode, payPercent };
+  const payload = { name, amount, currency, category, accountId, recurrence, execMode, payPercent };
 
   if (expenseId) {
     const idx = DATA.expenses.findIndex(e => e.id === expenseId);
