@@ -1,0 +1,27 @@
+# Free deployment: external Neon Free PostgreSQL; no paid disk or database.
+services:
+  - type: web
+    name: dashboard-de-vacances
+    runtime: docker
+    plan: free
+    region: frankfurt
+    numInstances: 1
+    rootDir: dashboard-de-vacances
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      - key: CAP_FRANCE_PASSWORD
+        sync: false
+      - key: CAP_FRANCE_SESSION_SECRET
+        generateValue: true
+      - key: CAP_FRANCE_REQUIRE_CLOUD
+        value: "1"
+      - key: CAP_FRANCE_REQUIRE_DATABASE
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
