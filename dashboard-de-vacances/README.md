@@ -40,3 +40,9 @@ L’aperçu regroupe les dépenses à mettre à jour. Une date de rappel faculta
 Le rappel peut être exporté au format Calendrier (.ics, avec alerte) sur Mac puis ajouté à un calendrier iCloud. Le partage du lien peut servir à créer un rappel dans l’app Apple, selon les options proposées par l’appareil. Le site n’envoie pas de notifications en arrière-plan ; les rappels Apple ne sont pas synchronisés avec les modifications du Dashboard et doivent être terminés ou modifiés séparément.
 
 Cette mise à jour ne réinitialise aucune donnée et ne modifie pas la structure de la base. Les dépenses sans rappel restent compatibles. Les sauvegardes de vérification et les identifiants restent privés, hors du dépôt.
+
+## Rappels groupés
+
+Le suivi des dépenses est désormais regroupé par date. Une journée avec des dépenses engagées ou prévues dispose d’un seul rappel, automatiquement calculé à J+5 à 09:00 par défaut. Le délai (0 à 365 jours) et l’heure sont réglables par voyage dans Réglages. L’heure suit l’heure locale de l’appareil utilisé. Les paiements retirent progressivement les dépenses du groupe et font disparaître les journées entièrement réglées.
+
+Chaque groupe propose un seul événement Calendrier avec alerte et un lien privé qui ouvre la journée. Le partage vers l’app Apple nécessite de régler sa date dans cette app. Les événements Apple importés restent indépendants ; ils doivent être mis à jour ou terminés manuellement. Les anciens rappels individuels enregistrés sont conservés dans les données, mais ne pilotent plus le suivi groupé.
