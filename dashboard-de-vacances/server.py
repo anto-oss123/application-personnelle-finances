@@ -10,6 +10,8 @@ from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urlsplit, parse_qs
+from urllib.request import urlopen, Request
+from urllib.error import URLError, HTTPError
 
 ROOT = Path(__file__).resolve().parent
 PASSWORD_HASH = os.environ.get('CAP_FRANCE_PASSWORD_HASH', '')
@@ -38,6 +40,34 @@ else:
 MAX_BODY = 10 * 1024 * 1024
 ATTEMPTS = {}
 LOCK = threading.Lock()
+RATE_CACHE = {}
+RATE_LOCK = threading.Lock()
+
+
+def currency_code(code):
+    return isinstance(code, str) and re.fullmatch(r'[A-Z]{3}', code) is not None
+
+
+def exchange_rate(code):
+    if not currency_code(code):
+        raise ValueError('Invalid currency')
+    if code == 'CAD':
+        return {'rate': 1, 'date': date.today().isoformat(), 'source': 'CAD'}
+    with RATE_LOCK:
+        cached = RATE_CACHE.get(code)
+        if cached and time.time() - cached[0] < 6 * 3600:
+            return cached[1]
+        # Fixed provider host, currency code only; no personal trip data is sent.
+        request = Request('https://api.frankfurter.dev/v2/rate/' + code + '/CAD', headers={'User-Agent': 'Dashboard-de-vacances/2.0', 'Accept': 'application/json'})
+        with urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read(20000))
+        if not numeric(payload.get('rate'), 1e-9, 1e6) or not good_date(payload.get('date')) or payload.get('base') != code or payload.get('quote') != 'CAD':
+            raise ValueError('Invalid rate response')
+        result = {'rate': payload['rate'], 'date': payload['date'], 'source': 'Frankfurter'}
+        RATE_CACHE[code] = (time.time(), result)
+        return result
+
+
 CATEGORIES = {'lodging', 'transport', 'food', 'groceries', 'activities', 'shopping', 'fees', 'other'}
 if CLOUD:
     if len(SECRET) < 32 or not ORIGIN.startswith('https://'):
@@ -107,7 +137,7 @@ def good_date(value):
 
 
 def valid(data):
-    if not isinstance(data, dict) or data.get('version') != 1:
+    if not isinstance(data, dict) or data.get('version') not in (1, 2):
         return False
     trips = data.get('trips')
     if not isinstance(trips, list) or not 1 <= len(trips) <= 100:
@@ -119,7 +149,7 @@ def valid(data):
         ids.add(t['id'])
         if not good_date(t.get('start')) or not good_date(t.get('end')) or not 0 <= (date.fromisoformat(t['end']) - date.fromisoformat(t['start'])).days < 3660:
             return False
-        if not numeric(t.get('budget')) or not numeric(t.get('rate'), .01, 100):
+        if not (t.get('budget') is None or numeric(t.get('budget'))) or not numeric(t.get('rate'), 1e-9, 1e6) or not currency_code(t.get('currency', 'EUR')) or ('autoRate' in t and type(t['autoRate']) is not bool):
             return False
         es = t.get('expenses')
         if not isinstance(es, list) or len(es) > 20000:
@@ -133,7 +163,7 @@ def valid(data):
                 return False
             if e.get('category') not in CATEGORIES or e.get('status') not in {'paid', 'planned', 'booked'} or e.get('kind') not in {'expense', 'refund'}:
                 return False
-            if not numeric(e.get('rate'), .01, 100) or not numeric(e.get('share'), 0, 100):
+            if not numeric(e.get('rate'), 1e-9, 1e6) or not numeric(e.get('share'), 0, 100) or not currency_code(e.get('currency', 'EUR')):
                 return False
             if 'eur' not in e or 'cad' not in e or (e['eur'] is None and e['cad'] is None):
                 return False
@@ -145,15 +175,18 @@ def valid(data):
     if not isinstance(rules, dict) or len(rules) > 10000 or any(not string(k, 150) or v not in CATEGORIES for k, v in rules.items()):
         return False
     p = data.get('planner')
-    if not isinstance(p, dict) or not string(p.get('name'), 100) or not good_date(p.get('start')) or not good_date(p.get('end')):
+    if not isinstance(p, dict) or not string(p.get('name'), 100):
         return False
-    if not 0 <= (date.fromisoformat(p['end']) - date.fromisoformat(p['start'])).days < 3660:
+    if not (p.get('start') == '' or good_date(p.get('start'))) or not (p.get('end') == '' or good_date(p.get('end'))):
         return False
-    if p.get('scenario') not in {'economy', 'comfort', 'generous'} or not numeric(p.get('rate'), .01, 100):
+    if p['start'] and p['end'] and not 0 <= (date.fromisoformat(p['end']) - date.fromisoformat(p['start'])).days < 3660:
         return False
-    if any(not numeric(p.get(k)) for k in ['lodging', 'food', 'groceries', 'transport', 'activities', 'shopping', 'flight', 'other', 'target']):
+    if p.get('scenario') not in {'economy', 'comfort', 'generous'} or not (p.get('rate') is None or numeric(p['rate'], 1e-9, 1e6)) or not (p.get('currency') == '' or currency_code(p.get('currency', 'EUR'))):
         return False
-    return numeric(p.get('margin'), 0, 100) and numeric(p.get('fee'), 0, 20) and type(p.get('travelers')) is int and 1 <= p['travelers'] <= 100
+    for key in ['lodging', 'food', 'groceries', 'transport', 'activities', 'shopping', 'flight', 'other', 'target']:
+        if key not in p or not (p[key] is None or numeric(p[key])):
+            return False
+    return (p.get('margin') is None or numeric(p['margin'], 0, 100)) and (p.get('fee') is None or numeric(p['fee'], 0, 20)) and (p.get('travelers') is None or (type(p['travelers']) is int and 1 <= p['travelers'] <= 100))
 
 
 def signature(token):
@@ -220,6 +253,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.json_response(200, {'mode': 'cloud' if CLOUD else 'local'})
         if path == '/health':
             return self.json_response(200, {'ok': True})
+        if path == '/api/rate':
+            if CLOUD and not self.authenticated():
+                return self.json_response(401, {'error': 'authentication_required'})
+            code = parse_qs(urlsplit(self.path).query).get('currency', [''])[0]
+            if not currency_code(code):
+                return self.json_response(400, {'error': 'invalid_currency'})
+            try:
+                return self.json_response(200, exchange_rate(code))
+            except (URLError, HTTPError, ValueError, OSError):
+                return self.json_response(503, {'error': 'rate_unavailable'})
         if path == '/api/state':
             if not self.authenticated():
                 return self.json_response(401, {'error': 'authentication_required'})
@@ -233,6 +276,10 @@ class Handler(BaseHTTPRequestHandler):
             if known_revision is not None and known_revision == row[0]:
                 return self.response(204, b'')
             return self.json_response(200, {'revision': row[0], 'data': json.loads(row[1]) if row[1] else None})
+        assets = {'/favicon.svg': ('favicon.svg', 'image/svg+xml'), '/icon-192.png': ('icon-192.png', 'image/png'), '/icon-512.png': ('icon-512.png', 'image/png'), '/apple-touch-icon.png': ('apple-touch-icon.png', 'image/png'), '/manifest.webmanifest': ('manifest.webmanifest', 'application/manifest+json')}
+        if path in assets:
+            filename, mime = assets[path]
+            return self.response(200, (ROOT / filename).read_bytes(), mime)
         if path in ('/', '/index.html'):
             return self.response(200, (ROOT / 'index.html').read_bytes(), 'text/html; charset=utf-8')
         return self.json_response(404, {'error': 'not_found'})
