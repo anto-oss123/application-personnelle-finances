@@ -161,6 +161,15 @@ def valid(data):
             eids.add(e['id'])
             if not string(e.get('title'), 150) or not string(e.get('note'), 2000) or not string(e.get('method'), 100) or not good_date(e.get('date')):
                 return False
+            reminder = e.get('reminderAt')
+            if reminder is not None:
+                if not isinstance(reminder, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z', reminder):
+                    return False
+                try:
+                    from datetime import datetime
+                    datetime.fromisoformat(reminder.replace('Z', '+00:00'))
+                except ValueError:
+                    return False
             if e.get('category') not in CATEGORIES or e.get('status') not in {'paid', 'planned', 'booked'} or e.get('kind') not in {'expense', 'refund'}:
                 return False
             if not numeric(e.get('rate'), 1e-9, 1e6) or not numeric(e.get('share'), 0, 100) or not currency_code(e.get('currency', 'EUR')):

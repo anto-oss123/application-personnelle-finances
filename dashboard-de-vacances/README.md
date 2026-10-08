@@ -28,3 +28,15 @@ L’application existante à la racine du dépôt reste distincte. Tout le Dashb
 - L’apparence suit `prefers-color-scheme` par défaut ; le choix manuel est une préférence locale à chaque appareil.
 - Les dépenses sont présentées sous forme de fiches sur mobile. La navigation tient compte de la zone de sécurité ; elle se masque pendant les formulaires et le toast ne la recouvre pas.
 - Un favicon SVG, des icônes PNG et un manifeste d’application permettent l’ajout à l’écran d’accueil.
+
+## Mise à jour : descriptions, dépenses en attente et rappels
+
+Les noms précédemment utilisés sont proposés dans la saisie, avec un avertissement si le nom normalisé, la date et le montant correspondent à une autre dépense du même voyage. Une seconde validation permet de conserver deux achats réellement distincts.
+
+Le graphique distingue les paiements nets (dont remboursements) et les dépenses engagées/prévues ; un sélecteur natif affiche les montants exacts de chaque jour. Les barres non nulles ont une hauteur minimale pour rester lisibles à côté des grosses dépenses.
+
+L’aperçu regroupe les dépenses à mettre à jour. Une date de rappel facultative est conservée avec chaque dépense et affichée au moment prévu. Le bouton de paiement ouvre la saisie pour vérifier le montant bancaire avant l’enregistrement.
+
+Le rappel peut être exporté au format Calendrier (.ics, avec alerte) sur Mac puis ajouté à un calendrier iCloud. Le partage du lien peut servir à créer un rappel dans l’app Apple, selon les options proposées par l’appareil. Le site n’envoie pas de notifications en arrière-plan ; les rappels Apple ne sont pas synchronisés avec les modifications du Dashboard et doivent être terminés ou modifiés séparément.
+
+Cette mise à jour ne réinitialise aucune donnée et ne modifie pas la structure de la base. Les dépenses sans rappel restent compatibles. Les sauvegardes de vérification et les identifiants restent privés, hors du dépôt.
