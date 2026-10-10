@@ -151,6 +151,8 @@ def valid(data):
             return False
         if not (t.get('budget') is None or numeric(t.get('budget'))) or not numeric(t.get('rate'), 1e-9, 1e6) or not currency_code(t.get('currency', 'EUR')) or ('autoRate' in t and type(t['autoRate']) is not bool):
             return False
+        if 'country' in t and (not isinstance(t['country'], str) or (t['country'] != '' and not re.fullmatch(r'[A-Z]{2}', t['country']))):
+            return False
         if 'reminderDelay' in t and (type(t['reminderDelay']) is not int or not 0 <= t['reminderDelay'] <= 365):
             return False
         if 'reminderTime' in t and (not isinstance(t['reminderTime'], str) or not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', t['reminderTime'])):
