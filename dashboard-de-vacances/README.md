@@ -46,3 +46,9 @@ Cette mise à jour ne réinitialise aucune donnée et ne modifie pas la structur
 Le suivi des dépenses est désormais regroupé par date. Une journée avec des dépenses engagées ou prévues dispose d’un seul rappel, automatiquement calculé à J+5 à 09:00 par défaut. Le délai (0 à 365 jours) et l’heure sont réglables par voyage dans Réglages. L’heure suit l’heure locale de l’appareil utilisé. Les paiements retirent progressivement les dépenses du groupe et font disparaître les journées entièrement réglées.
 
 Chaque groupe propose un seul événement Calendrier avec alerte et un lien privé qui ouvre la journée. Le partage vers l’app Apple nécessite de régler sa date dans cette app. Les événements Apple importés restent indépendants ; ils doivent être mis à jour ou terminés manuellement. Les anciens rappels individuels enregistrés sont conservés dans les données, mais ne pilotent plus le suivi groupé.
+
+## Présentation compacte
+
+Style inspiré de la référence fournie : surfaces blanches, titres noirs, trois indicateurs compacts, cartes de dépenses avec accents bleus ou violets, pastilles discrètes et navigation claire. Sur mobile, les dernières dépenses précèdent les rappels et les graphiques ; un bouton flottant ouvre le formulaire existant. La version ordinateur garde les panneaux de budget côte à côte. Le mode sombre suit toujours le réglage de l’appareil ou le choix dans Réglages.
+
+Les calculs, le format des sauvegardes, les rappels et la synchronisation restent identiques. Aucun voyage ni aucune dépense ne sont réinitialisés.
